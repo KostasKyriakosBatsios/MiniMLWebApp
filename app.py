@@ -3,6 +3,10 @@ import joblib
 import os
 import pandas as pd
 import streamlit as st
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder
 
 st.set_page_config(
@@ -107,3 +111,49 @@ if df is not None:
             st.success(f"✅ Saved LabelEncoder to `{label_encoder_path}`")
         except Exception as e:
             st.error(f"❌ Failed to save preprocessed data or encoder: {e}")
+
+st.header("🤖 Train ML Model")
+
+# Check for preprocessed data
+preprocessed_files = [f for f in os.listdir(preprocessed_folder) if f.startswith("preprocessed_")]
+selected_preprocessed_file = st.selectbox("Select preprocessed dataset for training", ["--"] + preprocessed_files)
+
+if selected_preprocessed_file != "--":
+    try:
+        preprocessed_path = os.path.join(preprocessed_folder, selected_preprocessed_file)
+        df_train = pd.read_csv(preprocessed_path)
+
+        class_column_options = [col for col in df_train.columns if col.startswith("class")]
+        target_col = st.selectbox("Select target column", class_column_options)
+
+        X = df_train.drop(columns=class_column_options)
+        y = df_train[target_col]
+
+        test_size = st.slider("Test set size (%)", min_value=10, max_value=50, value=20, step=5) / 100
+        model_type = st.selectbox("Choose model", ["Logistic Regression", "Random Forest"])
+
+        if st.button("🚀 Train Model"):
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+
+            if model_type == "Logistic Regression":
+                model = LogisticRegression(max_iter=1000)
+            else:
+                model = RandomForestClassifier(n_estimators=100)
+
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+
+            acc = accuracy_score(y_test, y_pred)
+            st.success(f"✅ Model trained! Accuracy on test set: `{acc:.4f}`")
+
+            # Save model
+            model_filename = f"{model_type.replace(' ', '_').lower()}_{selected_preprocessed_file.split('.')[0]}.pkl"
+            model_path = os.path.join("models", model_filename)
+            if not os.path.exists("models"):
+                os.makedirs("models")
+
+            joblib.dump(model, model_path)
+            st.info(f"💾 Model saved to `{model_path}`")
+
+    except Exception as e:
+        st.error(f"❌ Failed to train model: {e}")
